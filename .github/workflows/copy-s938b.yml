@@ -3,6 +3,7 @@ name: Copier la branche s938b
 on:
   push:
     branches: [copy-s938b-tmp]
+  workflow_dispatch:
 
 permissions:
   contents: write
