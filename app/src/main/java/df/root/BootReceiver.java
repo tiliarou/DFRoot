@@ -34,8 +34,8 @@ public class BootReceiver extends BroadcastReceiver implements IReporter {
 
     private void runExploit(Context context) {
         try {
-            if (!DeviceCheck.preflight("开机自动")) {
-                Log.e(TAG, "开机自动：自检未通过 —— 已中止，不修改任何文件");
+            if (!DeviceCheck.preflight("boot auto-run")) {
+                Log.e(TAG, "Boot auto-run: pre-flight check failed - aborted, no files modified");
                 return;
             }
 

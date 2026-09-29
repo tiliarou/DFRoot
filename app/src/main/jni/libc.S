@@ -97,10 +97,10 @@ libc_start:
 
     // x0 -> int argc
     ldr     w1, [x0]            // w1 = argc
-    cbz     w1, matched      // argc == 0，直接开干
+    cbz     w1, matched      // argc == 0, just go ahead
 
-    // 假定 argv 按 8 字节对齐，位于 argc 后面
-    // 即布局为: int argc; int pad; char *argv[argc];
+    // assume argv is 8-byte aligned, right after argc
+    // i.e. layout: int argc; int pad; char *argv[argc];
     add     x2, x0, #8
     ldr     x3, [x2]            // x3 = argv[0]
     cbz     x3, return_now
@@ -112,7 +112,7 @@ strcmp_loop:
     ldrb    w6, [x4], #1
     cmp     w5, w6
     b.ne    return_now
-    cbnz    w5, strcmp_loop     // 还没遇到 '\0'，继续比较
+    cbnz    w5, strcmp_loop     // not at '\0' yet, keep comparing
 
 matched:
     // argv[0] == executable_path

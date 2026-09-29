@@ -75,11 +75,11 @@ public class MainActivity extends AppCompatActivity implements IReporter {
     }
 
     /**
-     * 只有在确实安全时才允许运行：
-     *  - 本轮已经开过钩（/dev/df）；
-     *  - 检测到别的 root 方案已经在生效（/system/bin/su 等仍然存在）。
-     * 后者会让 ksud 跳过加载模块、停留在 vendor_modprobe 域，最终安装失败并把
-     * su 截成 0 字节 —— 实测过，所以直接拦住。
+     * Only allow running when it is truly safe:
+     *  - the hook has already been armed this boot (/dev/df);
+     *  - another root solution is already active (/system/bin/su etc. still present).
+     * The latter makes ksud skip loading its module and stay in the vendor_modprobe
+     * domain, failing its install and truncating su to 0 bytes - observed first-hand, so block it.
      */
     private void refreshRunState() {
         String reason = DeviceCheck.blockReason();
@@ -100,12 +100,12 @@ public class MainActivity extends AppCompatActivity implements IReporter {
         try {
             String reason = DeviceCheck.blockReason();
             if (reason != null) {
-                log("已中止：" + reason);
+                log("Aborted: " + reason);
                 return;
             }
             log(DeviceCheck.report());
-            if (!DeviceCheck.preflight("手动运行")) {
-                log("\n自检未通过：依赖路径缺失 —— 没有修改任何文件，已中止。");
+            if (!DeviceCheck.preflight("manual run")) {
+                log("\nPre-flight check failed: required paths missing - nothing was modified, aborted.");
                 return;
             }
 
@@ -113,7 +113,7 @@ public class MainActivity extends AppCompatActivity implements IReporter {
 
             IpSecManager.UdpEncapsulationSocket encapSock = ipsec.openUdpEncapsulationSocket();
             int encapPort = encapSock.getPort();
-            log("IPSec 封装端口: " + encapPort);
+            log("IPSec encapsulation port: " + encapPort);
 
             InetAddress loopback = InetAddress.getByName("127.0.0.1");
             IpSecManager.SecurityParameterIndex spiObj =
@@ -139,8 +139,8 @@ public class MainActivity extends AppCompatActivity implements IReporter {
                     .buildTransportModeTransform(loopback, spiObj);
 
             stageAsset(this, "ksud", true, getFilesDir());
-            log("ksud 已暂存到: " + new File(getFilesDir(), "ksud").getAbsolutePath());
-            log("开始执行漏洞利用……");
+            log("ksud staged to: " + new File(getFilesDir(), "ksud").getAbsolutePath());
+            log("Starting the exploit...");
 
             int icvLen = 128 / 8;
             String ksudPath = new File(getFilesDir(), "ksud").getAbsolutePath();
@@ -152,7 +152,7 @@ public class MainActivity extends AppCompatActivity implements IReporter {
 
         } catch (Exception e) {
             Log.e(TAG, "exploit exception", e);
-            log("\n发生异常: " + e);
+            log("\nException: " + e);
         } finally {
             mMain.post(() -> {
                 binding.btnRun.setText(R.string.btn_run);

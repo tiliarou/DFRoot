@@ -99,34 +99,34 @@ final class DeviceCheck {
         String kmi = kmi();
         String missing = missingPaths();
         StringBuilder sb = new StringBuilder();
-        sb.append("* 机型    : ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
-          .append("（").append(Build.DEVICE).append("）\n");
-        sb.append("* 固件    : ").append(Build.DISPLAY).append('\n');
-        sb.append("* 内核    : ").append(rel).append('\n');
-        sb.append("* KMI     : ").append(kmi.isEmpty() ? "无法识别" : kmi).append('\n');
+        sb.append("* Device  : ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
+          .append(" (").append(Build.DEVICE).append(")\n");
+        sb.append("* Firmware: ").append(Build.DISPLAY).append('\n');
+        sb.append("* Kernel  : ").append(rel).append('\n');
+        sb.append("* KMI     : ").append(kmi.isEmpty() ? "unrecognized" : kmi).append('\n');
         sb.append(missing.isEmpty()
-                ? "* 依赖路径: " + REQUIRED_PATHS.length + " 条全部就位\n"
-                : "* 依赖路径: 缺失 -> " + missing + "\n");
+                ? "* Deps    : all " + REQUIRED_PATHS.length + " required paths present\n"
+                : "* Deps    : missing -> " + missing + "\n");
         if (exactProfile()) {
-            sb.append("* 适配档位: 精确匹配（").append(PROFILE_DISPLAY).append("）\n");
+            sb.append("* Profile : exact match (").append(PROFILE_DISPLAY).append(")\n");
         } else {
-            sb.append("* 适配档位: 不是已验证的固件（")
-              .append(PROFILE_MODEL).append(" / ").append(PROFILE_RELEASE).append("）\n");
-            sb.append("            仍会继续，但内置 ksud 只针对上面这个组合验证过\n");
+            sb.append("* Profile : not a verified firmware (")
+              .append(PROFILE_MODEL).append(" / ").append(PROFILE_RELEASE).append(")\n");
+            sb.append("            It will still continue, but the bundled ksud was only validated for the above combo\n");
         }
         if (!PROFILE_KMI.equals(kmi)) {
-            sb.append("* 注意    : 当前内核 KMI 是 ").append(kmi.isEmpty() ? "未知" : kmi)
-              .append("，内置 ksud 只带 ").append(PROFILE_KMI).append('\n');
+            sb.append("* Warning : current kernel KMI is ").append(kmi.isEmpty() ? "unknown" : kmi)
+              .append(", bundled ksud only ships ").append(PROFILE_KMI).append('\n');
         }
         return sb.toString();
     }
 
     /** Logs the report; returns true when it is safe to start patching. */
     static boolean preflight(String where) {
-        Log.i(TAG, "自检（" + where + "）\n" + report());
+        Log.i(TAG, "Pre-flight (" + where + ")\n" + report());
         if (!criticalOk()) {
-            Log.e(TAG, "自检未通过（" + where + "）：依赖路径缺失（"
-                    + missingPaths() + "）或内核 KMI 无法识别 —— 已放弃，不修改任何文件");
+            Log.e(TAG, "Pre-flight failed (" + where + "): required paths missing ("
+                    + missingPaths() + ") or kernel KMI unrecognized - giving up, no files modified");
             return false;
         }
         return true;
@@ -161,11 +161,11 @@ final class DeviceCheck {
      */
     static String blockReason() {
         if (new File("/dev/df").exists()) {
-            return "本轮已运行过（/dev/df 存在），需要硬重启手机后才能再次运行";
+            return "Already run this boot (/dev/df exists); hard reboot the phone before running again";
         }
         String su = existingSu();
         if (su != null) {
-            return "检测到已有 root（" + su + " 存在），请先重启手机再运行本应用";
+            return "Existing root detected (" + su + " present); reboot the phone before running this app";
         }
         return null;
     }
