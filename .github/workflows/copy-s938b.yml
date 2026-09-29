@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  workflows: write
 
 jobs:
   copy:
@@ -16,10 +15,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: copy-s938b-tmp
-      - name: Copier s938b depuis le fork source
+      - name: Copier s938b sans les fichiers workflow
         run: |
           git remote add src https://github.com/2253845067/DFRoot.git
           git fetch src s938b
-          git push --force origin FETCH_HEAD:refs/heads/s938b
+          git checkout -B work FETCH_HEAD
+          git rm .github/workflows/ci.yml .github/workflows/release.yml
+          git -c user.name=copy-bot -c user.email=action@github.com commit -m "Copie de s938b depuis 2253845067/DFRoot (fichiers workflow a restaurer via l'API)"
+          git push --force origin HEAD:refs/heads/s938b
       - name: Supprimer la branche temporaire
         run: git push origin --delete copy-s938b-tmp
