@@ -10,14 +10,14 @@ permissions:
 jobs:
   copy:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: copy-s938b-tmp
       - name: Copier s938b depuis le fork source
         run: |
-          git clone --single-branch --branch s938b https://github.com/2253845067/DFRoot.git src
-          cd src
-          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/tiliarou/DFRoot.git" HEAD:refs/heads/s938b
+          git remote add src https://github.com/2253845067/DFRoot.git
+          git fetch src s938b
+          git push --force origin FETCH_HEAD:refs/heads/s938b
       - name: Supprimer la branche temporaire
-        run: |
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/tiliarou/DFRoot.git" --delete refs/heads/copy-s938b-tmp
+        run: git push origin --delete copy-s938b-tmp
